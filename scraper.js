@@ -2,8 +2,7 @@
   import * as cheerio from "cheerio";
   import { config } from "./config.js";
   import fs from "fs/promises";
-  import { error } from "console";
-
+  
   const delay = (ms) => new Promise((res) => setTimeout(res, ms));
 
   async function getHtml(url) {
@@ -13,7 +12,7 @@
       headers: {
         "User-Agent": "Mozilla/5.0",
       },
-      validateStatus: (status) => status < 500, // allow 4xx, block 5xx
+      validateStatus: (status) => status < 500, 
     });
 
     if (response.status !== 200) {
