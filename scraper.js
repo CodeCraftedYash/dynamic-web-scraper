@@ -8,7 +8,7 @@
   async function getHtml(url) {
   try {
     const response = await axios.get(url, {
-      timeout: 5000,
+      timeout: 10000,
       headers: {
         "User-Agent": "Mozilla/5.0",
       },
@@ -46,6 +46,7 @@
 
   $(selectors.container).each((_, el) => {
     result.push({
+      name: $(el).find(selectors.name).text().trim(),
       year: $(el).find(selectors.year).text().trim(),
       win: $(el).find(selectors.win).text().trim(),
       loss: $(el).find(selectors.loss).text().trim(),
@@ -64,6 +65,32 @@
 
   } catch (err) {
     console.log("Scrape error:", err);
+    return [];
+  }
+}
+
+async function scrapeAll(url,selectors) {
+  const allData = [];
+  try{
+    let page = 1;
+    while(true){
+      const newUrl = `${url}?page_num=${page}`;
+      const html = await getHtml(newUrl);
+      const $ = loadCheerio(html);
+      const data = extractForms($,selectors);
+
+      if(data.length == 0){
+        console.log("last page was ",page-1,"\n exiting scraping");
+        break;
+      }
+      allData.push(...data);
+      page++;
+      console.log("done page : ",page);
+      await delay(1000);
+    }
+    return allData;
+  } catch (err) {
+    console.log("Scrape error:", err.message);
     return [];
   }
 }
@@ -91,8 +118,11 @@
 
     const pageSelector = selectors[page];
     if (!pageSelector) continue;
+    //scrape for only one page 
+   /*  const data = await scrape(url, pageSelector); */
 
-    const data = await scrape(url, pageSelector);
+   //scrape for all pages in pagination 
+   const data = await scrapeAll(url,pageSelector);
 
     allData.push(...data);
 
