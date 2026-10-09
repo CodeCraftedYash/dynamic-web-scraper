@@ -3,7 +3,12 @@ export const config = {
   pages: [
     "pages/forms"
   ],
-  paginationPattern: "?page_num={page}",
+  paginationPattern: [
+    "?page_num={page}",
+    "?page={page}",
+    "?p={page}",
+    "/page/{page}"
+  ],
   selectors: {
     "pages/forms": {
       container: ".team",
