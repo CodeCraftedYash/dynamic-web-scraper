@@ -15,7 +15,7 @@ This scraper:
 - loads a base URL from config
 - loops through configured pages
 - extracts structured data using CSS selectors
-- optionally keeps scraping paginated pages until no more results are found
+- optionally keeps scraping paginated pages until no more results are found using flexible pagination patterns
 - saves the final output to `data.json`
 
 ## Repository Structure
@@ -35,6 +35,12 @@ export const config = {
   pages: [
     "pages/forms"
   ],
+  paginationPattern: [
+    "?page_num={page}",
+    "?page={page}",
+    "?p={page}",
+    "/page/{page}"
+  ],
   selectors: {
     "pages/forms": {
       container: ".team",
@@ -51,6 +57,7 @@ export const config = {
 
 - `baseUrl`: root website URL
 - `pages`: list of page paths to scrape
+- `paginationPattern`: array of URL patterns for pagination. Use `{page}` as a placeholder for the page number. The scraper tries each pattern until it finds one that returns data
 - `selectors`: the CSS selectors used for each page
 
 Each entry in `selectors` is mapped to a page path. The script uses that page name to find the correct selector group.
@@ -62,10 +69,10 @@ Each entry in `selectors` is mapped to a page path. The script uses that page na
 In `main()`, the scraper reads:
 
 ```javascript
-const { baseUrl, pages, selectors } = config;
+const { baseUrl, pages, selectors, paginationPattern } = config;
 ```
 
-This gives the scraper the website URL, page list, and extraction rules.
+This gives the scraper the website URL, page list, extraction rules, and pagination patterns.
 
 ### 2. Build the page URL
 
@@ -139,38 +146,58 @@ This loops through each container and reads the matching fields inside it.
 
 ### 7. Handle pagination
 
-The scraper supports paginated websites through `scrapeAll()`.
+The scraper supports paginated websites through `scrapeAll()` with flexible pagination patterns.
 
 ```javascript
-async function scrapeAll(url, selectors) {
+async function scrapeAll(url, selectors, paginationPattern = "?page_num={page}") {
   const allData = [];
-  let page = 1;
 
-  while (true) {
-    const newUrl = `${url}?page_num=${page}`;
-    const html = await getHtml(newUrl);
-    const $ = loadCheerio(html);
-    const data = extractForms($, selectors);
+  try {
+    let page = 1;
 
-    if (data.length === 0) {
-      break;
+    while (true) {
+      const pageSuffix = paginationPattern.replace("{page}", String(page));
+      const newUrl = `${url}${pageSuffix}`;
+      const html = await getHtml(newUrl);
+
+      if (!html) {
+        console.log("No HTML returned for", newUrl);
+        break;
+      }
+
+      const $ = loadCheerio(html);
+      const data = extractForms($, selectors);
+
+      if (data.length === 0) {
+        console.log("last page was ", page - 1, "\n exiting scraping");
+        break;
+      }
+
+      allData.push(...data);
+      page++;
+      console.log("done page : ", page);
+      await delay(1000);
     }
 
-    allData.push(...data);
-    page++;
-    await delay(1000);
+    return allData;
+  } catch (err) {
+    console.log("Scrape error:", err.message);
+    return [];
   }
-
-  return allData;
 }
 ```
 
-This means:
-- it requests page 1, then page 2, then page 3...
-- it keeps going until the page returns no data
-- when empty, it stops scraping
+How pagination works:
 
-That is how the project handles pagination without hardcoding page numbers.
+- `paginationPattern` accepts flexible URL patterns with `{page}` as a placeholder
+- Common patterns include:
+  - `?page_num={page}` — query parameter style
+  - `?page={page}` — alternative query parameter
+  - `?p={page}` — short query parameter
+  - `/page/{page}` — path-based pagination
+- The scraper replaces `{page}` with the page number (1, 2, 3...)
+- It keeps going until the page returns no data, then stops automatically
+- A delay between requests prevents overwhelming the server
 
 ## Basic usage
 
@@ -192,10 +219,10 @@ The results are written to `data.json`.
 
 ## Single-page vs paginated scraping
 
-In `main()`, the scraper is set to paginate by default:
+In `main()`, the scraper is set to paginate by default using the pattern from `config.js`:
 
 ```javascript
-const data = await scrapeAll(url, pageSelector);
+const data = await scrapeAll(url, pageSelector, paginationPattern || "?page_num={page}");
 ```
 
 If you want to scrape only a single page, you can switch to:
@@ -205,6 +232,27 @@ const data = await scrape(url, pageSelector);
 ```
 
 This is useful when the page does not have a pagination pattern or you only need one page of data.
+
+## Configuring pagination for different websites
+
+Different websites use different pagination URLs. Update `paginationPattern` in `config.js` to match your target site:
+
+```javascript
+// For query parameters:
+paginationPattern: "?page_num={page}"
+
+// For path-based pagination:
+paginationPattern: "/page/{page}"
+
+// For multiple patterns to try:
+paginationPattern: [
+  "?page_num={page}",
+  "?page={page}",
+  "/page/{page}"
+]
+```
+
+The scraper will use the pattern you provide to build the correct pagination URLs.
 
 ## Example output
 
@@ -227,9 +275,10 @@ This is useful when the page does not have a pagination pattern or you only need
   - `baseUrl`
   - `pages`
   - the selectors inside each page config
+  - `paginationPattern` to match the target site's URL structure
 
 ## Summary
 
-This repo is a lightweight scraping starter where configuration drives the work. Instead of writing custom logic for every page, you define the target page and selectors once, and the scraper handles fetching, parsing, pagination, and saving results.
+This repo is a lightweight scraping starter where configuration drives the work. Instead of writing custom logic for every page, you define the target page, selectors, and pagination pattern once, and the scraper handles fetching, parsing, pagination, and saving results.
 
 That makes it easy to reuse for many similar sites without creating a complicated framework.
