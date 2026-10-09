@@ -1,230 +1,235 @@
 # Dynamic Web Scraper
 
-A configurable web scraping utility built with Node.js, Axios, and Cheerio that extracts structured data from websites and exports it to JSON. The scraper uses a configuration-driven architecture, making it easy to adapt to different websites without modifying the core scraping logic.
-
-## Features
-
-* Configuration-driven scraping
-* Structured data extraction using CSS selectors
-* Automatic pagination handling
-* Rate limiting with request delays
-* Error handling for failed requests
-* JSON data export
-* Modular scraper architecture
-* Reusable extraction logic
-* Custom User-Agent support
+A simple, config-driven web scraper built with JavaScript. It is designed around one idea: define where to scrape and which selectors to use, then let the scraper handle the rest.
 
 ## Tech Stack
 
-* Node.js
-* JavaScript (ES Modules)
-* Axios
-* Cheerio
-* File System API
+- Node.js
+- JavaScript (ES Modules)
+- Axios for HTTP requests
+- Cheerio for HTML parsing and extraction
 
-## How It Works
+## What this project does
 
-The scraper follows a configurable workflow:
+This scraper:
+- loads a base URL from config
+- loops through configured pages
+- extracts structured data using CSS selectors
+- optionally keeps scraping paginated pages until no more results are found
+- saves the final output to `data.json`
 
-1. Load scraping configuration.
-2. Fetch HTML using Axios.
-3. Parse HTML with Cheerio.
-4. Extract structured data using predefined selectors.
-5. Traverse paginated pages automatically.
-6. Aggregate results.
-7. Export data to a JSON file.
+## Repository Structure
+
+- `config.js` — all scraping instructions live here
+- `scraper.js` — fetches pages, extracts data, and saves output
+- `data.json` — generated result file
+- `package.json` — project dependencies and scripts
+
+## How the config orchestrates everything
+
+The whole scraping flow is controlled by `config.js`.
+
+```javascript
+export const config = {
+  baseUrl: "https://www.scrapethissite.com/",
+  pages: [
+    "pages/forms"
+  ],
+  selectors: {
+    "pages/forms": {
+      container: ".team",
+      name: ".name",
+      year: ".year",
+      win: ".wins",
+      loss: ".losses"
+    }
+  }
+};
+```
+
+### What each field means
+
+- `baseUrl`: root website URL
+- `pages`: list of page paths to scrape
+- `selectors`: the CSS selectors used for each page
+
+Each entry in `selectors` is mapped to a page path. The script uses that page name to find the correct selector group.
+
+## Step-by-step scraping flow
+
+### 1. Read the config
+
+In `main()`, the scraper reads:
+
+```javascript
+const { baseUrl, pages, selectors } = config;
+```
+
+This gives the scraper the website URL, page list, and extraction rules.
+
+### 2. Build the page URL
+
+For each page in `pages`, it creates a full URL:
+
+```javascript
+const url = baseUrl + page;
+```
+
+So if:
+
+- `baseUrl` = `https://www.scrapethissite.com/`
+- `page` = `pages/forms`
+
+then the final URL becomes:
 
 ```text
-Configuration
-      │
-      ▼
- Fetch HTML
-      │
-      ▼
- Parse DOM
-      │
-      ▼
- Extract Data
-      │
-      ▼
- Handle Pagination
-      │
-      ▼
- Aggregate Results
-      │
-      ▼
-  Export JSON
+https://www.scrapethissite.com/pages/forms
 ```
 
-## Project Structure
+### 3. Pick the selectors for that page
 
-```text
-.
-├── config.js
-├── index.js
-├── data.json
-└── package.json
+The scraper looks up the right selector set:
+
+```javascript
+const pageSelector = selectors[page];
 ```
 
-## Installation
+This means the config is the source of truth for how data is extracted.
 
-Clone the repository:
+### 4. Fetch the page HTML
 
-```bash
-git clone https://github.com/CodeCraftedYash/dynamic-web-scraper.git
+The scraper uses Axios to request the page:
+
+```javascript
+const html = await getHtml(url);
 ```
 
-Move into the project directory:
+### 5. Parse with Cheerio
 
-```bash
-cd dynamic-web-scraper
+The HTML is turned into a DOM-like structure:
+
+```javascript
+const $ = loadCheerio(html);
 ```
 
-Install dependencies:
+This makes it easy to query elements using CSS selectors.
+
+### 6. Extract the data
+
+The core extraction function is:
+
+```javascript
+function extractForms($, selectors) {
+  const result = [];
+
+  $(selectors.container).each((_, el) => {
+    result.push({
+      name: $(el).find(selectors.name).text().trim(),
+      year: $(el).find(selectors.year).text().trim(),
+      win: $(el).find(selectors.win).text().trim(),
+      loss: $(el).find(selectors.loss).text().trim(),
+    });
+  });
+
+  return result;
+}
+```
+
+This loops through each container and reads the matching fields inside it.
+
+### 7. Handle pagination
+
+The scraper supports paginated websites through `scrapeAll()`.
+
+```javascript
+async function scrapeAll(url, selectors) {
+  const allData = [];
+  let page = 1;
+
+  while (true) {
+    const newUrl = `${url}?page_num=${page}`;
+    const html = await getHtml(newUrl);
+    const $ = loadCheerio(html);
+    const data = extractForms($, selectors);
+
+    if (data.length === 0) {
+      break;
+    }
+
+    allData.push(...data);
+    page++;
+    await delay(1000);
+  }
+
+  return allData;
+}
+```
+
+This means:
+- it requests page 1, then page 2, then page 3...
+- it keeps going until the page returns no data
+- when empty, it stops scraping
+
+That is how the project handles pagination without hardcoding page numbers.
+
+## Basic usage
+
+### Install dependencies
 
 ```bash
 npm install
 ```
 
-## Dependencies
-
-```json
-{
-  "axios": "^1.15.0",
-  "cheerio": "^1.2.0"
-}
-```
-
-## Configuration
-
-The scraper is controlled through a configuration object.
-
-Example:
-
-```js
-export const config = {
-  baseUrl: "https://example.com",
-  pages: ["/section"],
-  selectors: {
-    "/section": {
-      container: ".row",
-      name: ".name",
-      year: ".year",
-      win: ".wins",
-      loss: ".loss",
-    },
-  },
-};
-```
-
-This allows the scraper to target different websites by updating selectors rather than changing scraping logic.
-
-## Running the Scraper
+### Run the scraper
 
 ```bash
-node index.js
+node scraper.js
 ```
 
-The scraper will:
+### Output
 
-* Visit each configured page
-* Follow pagination automatically
-* Extract structured data
-* Save results to `data.json`
+The results are written to `data.json`.
 
-## Sample Output
+## Single-page vs paginated scraping
+
+In `main()`, the scraper is set to paginate by default:
+
+```javascript
+const data = await scrapeAll(url, pageSelector);
+```
+
+If you want to scrape only a single page, you can switch to:
+
+```javascript
+const data = await scrape(url, pageSelector);
+```
+
+This is useful when the page does not have a pagination pattern or you only need one page of data.
+
+## Example output
 
 ```json
 [
   {
-    "name": "Team A",
-    "year": "2024",
-    "win": "18",
-    "loss": "2"
-  },
-  {
-    "name": "Team B",
-    "year": "2024",
-    "win": "15",
-    "loss": "5"
+    "name": "Boston Bruins",
+    "year": "1924",
+    "win": "17",
+    "loss": "14"
   }
 ]
 ```
 
-## Technical Highlights
+## Notes
 
-### Pagination Support
+- The project is intentionally simple and easy to customize.
+- Most behavior is controlled from `config.js`.
+- For new websites, you usually only need to update:
+  - `baseUrl`
+  - `pages`
+  - the selectors inside each page config
 
-Automatically continues scraping until no additional records are found.
+## Summary
 
-```js
-while (true) {
-  const data = extractForms($, selectors);
+This repo is a lightweight scraping starter where configuration drives the work. Instead of writing custom logic for every page, you define the target page and selectors once, and the scraper handles fetching, parsing, pagination, and saving results.
 
-  if (data.length === 0) {
-    break;
-  }
-
-  page++;
-}
-```
-
-### Request Throttling
-
-Introduces delays between requests to reduce server load and avoid aggressive scraping behavior.
-
-```js
-await delay(1000);
-```
-
-### Fault Tolerance
-
-Handles:
-
-* Request failures
-* Network errors
-* Non-200 responses
-* Missing pages
-
-without terminating the scraping process.
-
-## Challenges Solved
-
-* Building reusable scraping logic
-* Extracting structured data from dynamic page layouts
-* Managing paginated content
-* Preventing scraper failures due to bad responses
-* Exporting clean datasets for further analysis
-
-## Future Improvements
-
-* [ ] CSV export support
-* [ ] Multi-format exports (CSV, Excel)
-* [ ] Concurrent scraping
-* [ ] Playwright integration for JavaScript-heavy websites
-* [ ] CLI commands
-* [ ] Database storage
-* [ ] Logging system
-* [ ] Retry mechanism for failed requests
-
-## What I Learned
-
-This project strengthened my understanding of:
-
-* Web scraping architecture
-* DOM parsing and traversal
-* Axios request handling
-* Rate limiting strategies
-* Data extraction patterns
-* Error handling in Node.js
-* Building reusable backend utilities
-
-## Disclaimer
-
-This project was created for educational purposes. Always ensure compliance with a website's Terms of Service, robots.txt policies, and applicable laws before scraping data.
-
-## Author
-
-Yash Mishra
-
-GitHub: https://github.com/CodeCraftedYash
+That makes it easy to reuse for many similar sites without creating a complicated framework.
