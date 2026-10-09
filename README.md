@@ -1,24 +1,29 @@
 # Dynamic Web Scraper
 
-A lightweight, config-driven web scraper built with JavaScript. Define what to scrape and which selectors to use—the scraper handles fetching, parsing, pagination, and saving.
-
-**Perfect for:** scraping multiple pages from a single site, handling pagination automatically, and reusing the same scraper for similar websites.
+A lightweight, config-driven web scraper built with JavaScript. Define the pages and selectors you want, and this scraper will fetch, parse, paginate, and save data for you.
 
 ## Features
 
-- ✅ Config-based scraping—no code changes needed for new sites
-- ✅ Automatic pagination—scrapes until no data remains
-- ✅ Flexible URL patterns—supports query params, path-based, and custom pagination
-- ✅ Error handling—gracefully handles HTTP errors and network timeouts
-- ✅ Rate limiting—1-second delay between requests to avoid overwhelming servers
-- ✅ Structured output—results saved as JSON
+- Config-driven scraping with a single source of truth in `config.js`
+- Automatic pagination support
+- Flexible pagination patterns for query-string and path-based URLs
+- Works with common selector-based extraction flows
+- Saves structured data to `data.json`
+- Built-in HTTP error handling with timeout and safe fallback behavior
 
 ## Tech Stack
 
-- **Node.js** — JavaScript runtime
-- **Axios** — HTTP client for fetching pages
-- **Cheerio** — Fast HTML parsing and CSS selector support
-- **ES Modules** — Modern JavaScript module syntax
+- Node.js
+- JavaScript (ES Modules)
+- Axios
+- Cheerio
+
+## Repository Layout
+
+- `config.js` — target pages, selectors, and pagination configuration
+- `scraper.js` — scraping flow and output generation
+- `data.json` — generated output file
+- `package.json` — project metadata and dependencies
 
 ## Quick Start
 
@@ -28,25 +33,34 @@ A lightweight, config-driven web scraper built with JavaScript. Define what to s
 npm install
 ```
 
-### 2. Configure your target website in `config.js`
+### 2. Configure the scrape target
+
+Open `config.js` and update the base URL, page list, selectors, and pagination pattern.
 
 ```javascript
 export const config = {
-  baseUrl: "https://www.example.com/",
-  pages: ["products", "reviews"],
-  paginationPattern: "?page={page}",
+  baseUrl: "https://www.scrapethissite.com/",
+  pages: ["pages/forms"],
+  requestDelay: 1000,
+  maxPages: 50,
+  checkNextLink: true,
+  paginationPattern: [
+    "?page_num={page}",
+    "?page={page}",
+    "?p={page}",
+    "/page/{page}"
+  ],
+  pagination: {
+    default: "?page_num={page}",
+    "pages/forms": "?page_num={page}"
+  },
   selectors: {
-    products: {
-      container: ".product-item",
-      name: ".product-name",
-      price: ".product-price",
-      link: "a"
-    },
-    reviews: {
-      container: ".review",
-      author: ".reviewer-name",
-      rating: ".stars",
-      text: ".review-text"
+    "pages/forms": {
+      container: ".team",
+      name: ".name",
+      year: ".year",
+      win: ".wins",
+      loss: ".losses"
     }
   }
 };
@@ -58,394 +72,320 @@ export const config = {
 node scraper.js
 ```
 
-Results are saved to `data.json`.
+The script will fetch the configured pages, scrape records, follow pagination rules, and save results to `data.json`.
 
 ---
 
 ## Configuration Guide
 
-### Required Fields
+### `baseUrl`
 
-**`baseUrl`** — The root URL of the website
+The root URL for the website.
+
 ```javascript
 baseUrl: "https://www.scrapethissite.com/"
 ```
 
-**`pages`** — Array of paths to scrape (appended to baseUrl)
+### `pages`
+
+A list of page paths to scrape. These get appended to `baseUrl`.
+
 ```javascript
-pages: ["pages/forms", "pages/tables"]
-// Results in URLs like: https://www.scrapethissite.com/pages/forms
+pages: ["pages/forms", "pages/teams"]
 ```
 
-**`selectors`** — CSS selectors for data extraction, keyed by page name
+This will generate URLs like:
+
+```text
+https://www.scrapethissite.com/pages/forms
+https://www.scrapethissite.com/pages/teams
+```
+
+### `selectors`
+
+A map of selectors for each page. The key should match a page path in `pages`.
+
 ```javascript
 selectors: {
   "pages/forms": {
-    container: ".team",        // Wrapping element for each record
-    name: ".name",             // Child selector for name
-    year: ".year",             // Child selector for year
-    win: ".wins",              // Child selector for wins
-    loss: ".losses"            // Child selector for losses
+    container: ".team",
+    name: ".name",
+    year: ".year",
+    win: ".wins",
+    loss: ".losses"
   }
 }
 ```
 
-### Optional Fields
+Each selector maps to a CSS selector used by Cheerio for extraction.
 
-**`paginationPattern`** — How to build paginated URLs. Can be a string or array of patterns.
+### `paginationPattern` (legacy support)
 
-String pattern (uses one style):
-```javascript
-paginationPattern: "?page_num={page}"
-// Results in: base_url?page_num=1, base_url?page_num=2, etc.
-```
+This is the older format supported for compatibility.
 
-Array of patterns (tries each until data is found):
 ```javascript
 paginationPattern: [
-  "?page_num={page}",      // Try this first
-  "?page={page}",          // Then this
-  "/page/{page}",          // Then this
-  "?p={page}"              // Finally this
+  "?page_num={page}",
+  "?page={page}",
+  "?p={page}",
+  "/page/{page}"
 ]
 ```
 
-**Placeholder**: Use `{page}` as a placeholder for the page number. It's replaced with 1, 2, 3... automatically.
+This system tries each pattern until it finds one that works.
 
-**Default**: If `paginationPattern` is not provided, defaults to `"?page_num={page}"`.
+### `pagination` (recommended)
+
+This newer format is more flexible and page-specific.
+
+```javascript
+pagination: {
+  default: "?page_num={page}",
+  "pages/forms": "?page_num={page}",
+  "pages/teams": {
+    type: "offset",
+    pattern: "?offset={offset}&limit={limit}",
+    limit: 20
+  }
+}
+```
+
+Supported options:
+- `string`: `"?page={page}"`
+- `array`: `["?page_num={page}", "?page={page}"]`
+- `object`: `{ type: "page" | "offset", pattern: "...?", limit: 20 }`
+
+Your pagination pattern can include placeholders like:
+- `{page}`
+- `{offset}`
+- `{limit}`
 
 ---
 
-## How It Works
+## Pagination Behavior
 
-### Architecture Overview
+The scraper loops through pages until it determines that the last page has been reached.
 
-```
-config.js (configuration)
-    ↓
-scraper.js (main flow)
-    ├─→ getHtml() — Fetch page HTML via Axios
-    ├─→ loadCheerio() — Parse HTML into DOM structure
-    ├─→ extractForms() — Extract data using CSS selectors
-    ├─→ scrapeAll() — Loop through pages with pagination
-    └─→ saveJSON() — Write results to data.json
+### Default behavior
+
+If no pagination config is provided, it falls back to:
+
+```javascript
+"?page_num={page}"
 ```
 
-### Step-by-Step Scraping Flow
+### What the scraper does
 
-#### Step 1: Read the configuration
+1. Builds a URL using the selected pagination pattern
+2. Fetches the page HTML
+3. Extracts records using the configured selectors
+4. Stops when:
+   - no data is returned,
+   - duplicate data is detected,
+   - no next link is found (if enabled),
+   - or the max page count is reached
+
+### Example of a page pattern
+
+```javascript
+"?page_num={page}"
+```
+
+Turns into:
+
+```text
+https://www.scrapethissite.com/pages/forms?page_num=1
+https://www.scrapethissite.com/pages/forms?page_num=2
+https://www.scrapethissite.com/pages/forms?page_num=3
+```
+
+### Offset-based pagination
+
+For sites using offset values:
+
+```javascript
+{
+  type: "offset",
+  pattern: "?offset={offset}&limit={limit}",
+  limit: 20
+}
+```
+
+This produces:
+
+```text
+?offset=0&limit=20
+?offset=20&limit=20
+?offset=40&limit=20
+```
+
+---
+
+## Scraping Flow
+
+### 1. Read the config
 
 ```javascript
 const { baseUrl, pages, selectors, paginationPattern } = config;
 ```
 
-The scraper loads the website URL, pages to scrape, selectors, and pagination rules from `config.js`.
-
-#### Step 2: Loop through each page
+### 2. Build the page URL
 
 ```javascript
-for (const page of pages) {
-  const url = baseUrl + page;
-  const pageSelector = selectors[page];
-  const data = await scrapeAll(url, pageSelector, paginationPattern);
-}
+const url = baseUrl + page;
 ```
 
-For each page path in the config:
-- Builds the full URL by combining `baseUrl` + page path
-- Looks up the selector group for that page
-- Scrapes all paginated results
+### 3. Resolve the pagination strategy
 
-#### Step 3: Fetch HTML
+The scraper tries the configured pagination strategy for the current page. It supports:
+- a single string pattern,
+- multiple candidate patterns,
+- or a richer object-based pattern.
+
+### 4. Fetch the HTML
 
 ```javascript
-async function getHtml(url) {
-  const response = await axios.get(url, {
-    timeout: 10000,
-    headers: { "User-Agent": "Mozilla/5.0" },
-    validateStatus: (status) => status < 500
-  });
-  
-  if (response.status !== 200) return null;
-  return response.data;
-}
+const html = await getHtml(url);
 ```
 
-Uses Axios to fetch the page. Includes:
-- **Timeout**: 10-second limit to prevent hanging
-- **User-Agent**: Mimics a browser to avoid rejection
-- **Error handling**: Returns `null` on HTTP errors or network failures
-
-#### Step 4: Parse HTML with Cheerio
+### 5. Parse with Cheerio
 
 ```javascript
 const $ = cheerio.load(html);
 ```
 
-Cheerio parses HTML into a jQuery-like object, making CSS selector queries fast and familiar.
-
-#### Step 5: Extract data from the page
+### 6. Extract rows
 
 ```javascript
 function extractForms($, selectors) {
   const result = [];
-  
+
   $(selectors.container).each((_, el) => {
     result.push({
       name: $(el).find(selectors.name).text().trim(),
       year: $(el).find(selectors.year).text().trim(),
       win: $(el).find(selectors.win).text().trim(),
-      loss: $(el).find(selectors.loss).text().trim()
+      loss: $(el).find(selectors.loss).text().trim(),
     });
   });
-  
+
   return result;
 }
 ```
 
-For each container element:
-1. Loops through all matches
-2. Extracts each field using child selectors
-3. Trims whitespace and returns structured data
-
-#### Step 6: Handle pagination
+### 7. Save the final output
 
 ```javascript
-async function scrapeAll(url, selectors, paginationPattern = "?page_num={page}") {
-  const allData = [];
-  let page = 1;
-
-  while (true) {
-    const pageSuffix = paginationPattern.replace("{page}", String(page));
-    const newUrl = `${url}${pageSuffix}`;
-    const html = await getHtml(newUrl);
-
-    if (!html) break; // Network error, stop
-    
-    const $ = cheerio.load(html);
-    const data = extractForms($, selectors);
-
-    if (data.length === 0) break; // No data on this page, stop
-    
-    allData.push(...data);
-    page++;
-    await delay(1000); // 1-second delay between requests
-  }
-
-  return allData;
-}
+await fs.writeFile("data.json", JSON.stringify(data, null, 2), "utf-8");
 ```
-
-**Pagination logic:**
-1. Start at page 1
-2. Replace `{page}` placeholder with current page number
-3. Fetch and parse the page
-4. Extract data
-5. If no data found → stop (we've reached the last page)
-6. Otherwise → add data, increment page counter, wait 1 second, repeat
-
-#### Step 7: Save results
-
-```javascript
-async function saveJSON(data) {
-  await fs.writeFile("data.json", JSON.stringify(data, null, 2), "utf-8");
-}
-```
-
-Writes all collected data to `data.json` with pretty formatting (2-space indentation).
 
 ---
 
-## Usage Examples
+## Example Configurations
 
-### Example 1: Single-page scraping
-
-If you only need one page (no pagination):
-
-```javascript
-// In scraper.js, replace scrapeAll() with scrape():
-const data = await scrape(url, pageSelector);
-```
-
-### Example 2: Multiple pages with different selectors
+### Simple query-parameter pagination
 
 ```javascript
 export const config = {
   baseUrl: "https://example.com/",
-  pages: ["products", "reviews", "news"],
-  paginationPattern: "?page={page}",
+  pages: ["products"],
+  pagination: {
+    default: "?page={page}"
+  },
   selectors: {
-    products: { container: ".product", name: ".title", price: ".cost" },
-    reviews: { container: ".review", author: ".user", rating: ".stars" },
-    news: { container: ".article", title: ".headline", date: ".posted" }
-  }
-};
-```
-
-### Example 3: Custom pagination patterns
-
-Different websites use different URL structures. Update `paginationPattern` to match:
-
-```javascript
-// Query parameter style (most common)
-paginationPattern: "?page={page}"
-// Results: base_url?page=1, base_url?page=2
-
-// Alternative query parameter
-paginationPattern: "?p={page}"
-// Results: base_url?p=1, base_url?p=2
-
-// Path-based pagination
-paginationPattern: "/page/{page}"
-// Results: base_url/page/1, base_url/page/2
-
-// Multiple patterns (try first, second, third...)
-paginationPattern: [
-  "?page_num={page}",
-  "?page={page}",
-  "/page/{page}"
-]
-```
-
-### Example 4: Real-world config (scraping a product listing)
-
-```javascript
-export const config = {
-  baseUrl: "https://www.example-store.com/",
-  pages: ["category/electronics"],
-  paginationPattern: "?page={page}",
-  selectors: {
-    "category/electronics": {
+    products: {
       container: ".product-card",
-      title: ".product-title",
-      price: ".product-price",
-      rating: ".star-rating",
-      inStock: ".availability"
+      name: ".product-name",
+      price: ".price"
     }
   }
 };
 ```
 
-Run:
-```bash
-node scraper.js
-```
+### Multiple fallback patterns
 
-Output (`data.json`):
-```json
-[
-  {
-    "title": "Laptop Pro 15",
-    "price": "$1,299",
-    "rating": "4.5",
-    "inStock": "In Stock"
-  },
-  {
-    "title": "Wireless Mouse",
-    "price": "$29.99",
-    "rating": "4.8",
-    "inStock": "In Stock"
-  }
-]
-```
-
----
-
-## API Reference
-
-### `getHtml(url)`
-Fetches HTML from a URL. Returns the HTML string or `null` if the request fails.
-
-### `loadCheerio(html)`
-Parses HTML into a Cheerio object for CSS selector queries.
-
-### `extractForms($, selectors)`
-Extracts data from the parsed HTML using the provided selectors. Returns an array of objects.
-
-### `scrape(url, selectors)`
-Scrapes a single page (no pagination). Returns an array of extracted records.
-
-### `scrapeAll(url, selectors, paginationPattern)`
-Scrapes multiple pages using pagination. Loops until no data is returned. Returns an array of all records from all pages.
-
-### `saveJSON(data)`
-Writes the data array to `data.json` with pretty formatting.
-
----
-
-## Troubleshooting
-
-### Problem: "No data in data.json"
-
-**Check:**
-1. Is `baseUrl` correct? Visit it in your browser.
-2. Are your selectors correct? Inspect the HTML and verify the CSS selectors match.
-3. Is there pagination? Check if pages require a `paginationPattern`.
-
-**Example selector debugging:**
 ```javascript
-// Wrong (targets empty elements)
-selectors: { container: ".product-item", name: ".non-existent-class" }
-
-// Right (targets actual elements)
-selectors: { container: ".product", name: ".product-name" }
+export const config = {
+  baseUrl: "https://example.com/",
+  pages: ["products"],
+  paginationPattern: [
+    "?page_num={page}",
+    "?page={page}",
+    "/page/{page}"
+  ],
+  selectors: {
+    products: {
+      container: ".product-card",
+      name: ".product-name",
+      price: ".price"
+    }
+  }
+};
 ```
 
-### Problem: "Request failed" or "Non-200 response"
+### Offset-based pagination
 
-**Causes:**
-- The website blocks requests without a proper User-Agent
-- The website uses JavaScript to load content (Cheerio can't execute JS)
-- The website has rate limiting or requires authentication
-
-**Solutions:**
-- Check the website's `robots.txt` and terms of service
-- Use a headless browser like Puppeteer for JavaScript-heavy sites
-- Add authentication headers if needed
-
-### Problem: "Scraper hangs or runs forever"
-
-**Causes:**
-- Pagination pattern is wrong (always returns data)
-- Empty page returns HTML but no matching elements
-
-**Solutions:**
-- Log page URLs to verify they're correct:
-  ```javascript
-  console.log("Fetching:", newUrl);
-  ```
-- Verify selectors with `console.log(data.length)` inside `scrapeAll()`
+```javascript
+export const config = {
+  baseUrl: "https://example.com/",
+  pages: ["articles"],
+  pagination: {
+    "articles": {
+      type: "offset",
+      pattern: "?offset={offset}&limit={limit}",
+      limit: 25
+    }
+  },
+  selectors: {
+    articles: {
+      container: ".article",
+      title: ".title",
+      author: ".author"
+    }
+  }
+};
+```
 
 ---
 
-## Missing Documentation in Code
+## Common Pitfalls
 
-The following areas could use inline code comments:
+### 1. Wrong pagination pattern
 
-1. **`scraper.js` line 77**: The logic for replacing `{page}` placeholder isn't clearly explained
-2. **`scraper.js` line 97**: The 1-second delay and why it's needed
-3. **`config.js`**: No inline documentation for the structure or field requirements
-4. **Selector naming**: `extractForms()` is hardcoded for "forms" but can extract any data type
+If the site uses `/page/2` but your config uses `?page=2`, the scraper will either get no data or loop incorrectly.
+
+### 2. Selector mismatch
+
+If the selectors target elements that no longer exist, the scraper will produce empty arrays.
+
+### 3. JavaScript-heavy pages
+
+Cheerio does not run JavaScript. If content is rendered client-side, the scraper may not see it.
+
+### 4. Rate-limited sites
+
+Large pages or frequent requests can trigger blocks. Use a higher `requestDelay` if needed.
+
+---
+
+## Recommended Improvements for the Future
+
+These improvements would make this scraper even more robust:
+
+- Add retry logic for failed requests
+- Support login/session cookies
+- Support JavaScript rendering via Playwright or Puppeteer
+- Allow custom extraction functions per page
+- Add CLI arguments for config overrides
+- Add progress logging for large scrapes
 
 ---
 
-## Performance Notes
+## Summary
 
-- **Rate limiting**: 1-second delay between requests prevents overwhelming servers
-- **Timeout**: 10-second limit per request prevents hanging
-- **Error resilience**: Network errors or missing pages don't crash the scraper
-- **Memory**: All data is held in memory until saved; very large datasets may require streaming
+This scraper is intentionally simple: configuration drives the behavior. Once you define the URL structure, selectors, and pagination pattern, the scraper will handle the rest.
 
----
-
-## Limitations
-
-1. **No JavaScript execution**: Cheerio doesn't run JavaScript. Sites that load content via JS won't work.
-2. **No authentication**: Doesn't support login or session-based scraping out of the box.
-3. **Single extraction function**: Currently hardcoded to extract the same data type per page.
-4. **No retry logic**: Failed requests are skipped rather than retried.
-
----
+The new flexible pagination config makes it easier to support more real-world websites while keeping the project simple and reusable.
 
 ## License
 
@@ -453,4 +393,4 @@ ISC
 
 ## Author
 
-[CodeCraftedYash](https://github.com/CodeCraftedYash)
+CodeCraftedYash
