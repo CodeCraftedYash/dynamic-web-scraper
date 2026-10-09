@@ -1,12 +1,21 @@
 export const config = {
-  baseUrl: "https://www.asklaila.com/search/Bangalore/",
-  pages : [
-    "-/visa/"
+  baseUrl: "https://www.scrapethissite.com/",
+  pages: [
+    "pages/forms"
   ],
-  selectors : {
-    "-/visa/":{
-      container:".container",
-      col:".colomn_border"
+  paginationPattern: [
+    "?page_num={page}",
+    "?page={page}",
+    "?p={page}",
+    "/page/{page}"
+  ],
+  selectors: {
+    "pages/forms": {
+      container: ".team",
+      name: ".name",
+      year: ".year",
+      win: ".wins",
+      loss: ".losses"
     }
   }
 };
